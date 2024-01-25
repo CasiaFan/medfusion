@@ -7,13 +7,13 @@ from pathlib import Path
 from datetime import datetime
 
 import torch 
-from torch.utils.data import ConcatDataset
+from torch.utils.data import ConcatDataset, random_split
 from pytorch_lightning.trainer import Trainer
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 
 
 from medical_diffusion.data.datamodules import SimpleDataModule
-from medical_diffusion.data.datasets import AIROGSDataset, MSIvsMSS_2_Dataset, CheXpert_2_Dataset
+from medical_diffusion.data.datasets import AIROGSDataset, MSIvsMSS_2_Dataset, CheXpert_2_Dataset, CESCDataset
 from medical_diffusion.models.embedders.latent_embedders import VQVAE, VQGAN, VAE, VAEGAN
 
 import torch.multiprocessing
@@ -25,8 +25,8 @@ if __name__ == "__main__":
     current_time = datetime.now().strftime("%Y_%m_%d_%H%M%S")
     path_run_dir = Path.cwd() / 'runs' / str(current_time)
     path_run_dir.mkdir(parents=True, exist_ok=True)
-    gpus = [0] if torch.cuda.is_available() else None
-
+    gpus = [0,1,2,3] if torch.cuda.is_available() else None
+    batch_size = 72
 
     # ------------ Load Data ----------------
     # ds_1 = AIROGSDataset( #  256x256
@@ -46,21 +46,37 @@ if __name__ == "__main__":
     #     path_root='/mnt/hdd/datasets/pathology/kather_msi_mss_2/train/'
     # )
 
-    ds_3 = CheXpert_2_Dataset( #  256x256
-        # image_resize=128, 
-        augment_horizontal_flip=False,
-        augment_vertical_flip=False,
-        # path_root = '/home/gustav/Documents/datasets/CheXpert/preprocessed_tianyu'
-        path_root = '/mnt/hdd/datasets/chest/CheXpert/ChecXpert-v10/preprocessed_tianyu'
-    )
-
+    # ds_3 = CheXpert_2_Dataset( #  256x256
+    #     # image_resize=128, 
+    #     augment_horizontal_flip=False,
+    #     augment_vertical_flip=False,
+    #     # path_root = '/home/gustav/Documents/datasets/CheXpert/preprocessed_tianyu'
+    #     path_root = '/mnt/hdd/datasets/chest/CheXpert/ChecXpert-v10/preprocessed_tianyu'
+    # )
+    ds = CESCDataset(path_root="/home/zongfan2/Documents/m-pax_lib/data/CESC", 
+                     augment_horizontal_flip=True,
+                     augment_vertical_flip=True,)
+    
     # ds = ConcatDataset([ds_1, ds_2, ds_3])
-   
+    print(len(ds))
+    # split train val and test
+    (
+        ds_train,
+        ds_val,
+        ds_test,
+    ) = random_split(
+        ds,
+        [248562+28408, 35509+7102, 35509],
+        generator=torch.Generator().manual_seed(42),
+    )
+    
     dm = SimpleDataModule(
-        ds_train = ds_3,
-        batch_size=8, 
-        # num_workers=0,
-        pin_memory=True
+        ds_train = ds_train,
+        ds_val = ds_val, 
+        ds_test = ds_test,
+        batch_size=batch_size, 
+        num_workers=0,
+        pin_memory=True,
     ) 
     
 
@@ -70,7 +86,8 @@ if __name__ == "__main__":
         out_channels=3, 
         emb_channels=8,
         spatial_dims=2,
-        hid_chs =    [ 64, 128, 256,  512], 
+        # hid_chs =    [ 64, 128, 256,  512], 
+        hid_chs = [32, 64, 128, 256],
         kernel_sizes=[ 3,  3,   3,    3],
         strides =    [ 1,  2,   2,    2],
         deep_supervision=1,
@@ -152,7 +169,7 @@ if __name__ == "__main__":
     )
     trainer = Trainer(
         accelerator='gpu',
-        devices=[0],
+        devices=gpus,
         # precision=16,
         # amp_backend='apex',
         # amp_level='O2',
@@ -172,8 +189,8 @@ if __name__ == "__main__":
     )
     
     # ---------------- Execute Training ----------------
-    trainer.fit(model, datamodule=dm)
-
+    # trainer.fit(model, datamodule=dm)
+    trainer.fit(model, train_dataloaders=dm)
     # ------------- Save path to best model -------------
     model.save_best_checkpoint(trainer.logger.log_dir, checkpointing.best_model_path)
 

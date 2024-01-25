@@ -196,3 +196,26 @@ class CheXpert_2_Dataset(SimpleDataset2D):
             target = self.labels.loc[self.labels.index[index], 'Cardiomegaly']
             weights[index] = weight_per_class[target]
         return weights
+    
+
+class CESCDataset(SimpleDataset2D):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        df = pd.read_csv(self.path_root/'labels.csv')
+        self.imgs = df["image"]
+        self.labels = df["label"]
+    
+    def __len__(self):
+        return len(self.labels)
+
+    def __getitem__(self, index):
+        path_item = self.imgs[index]
+        img = self.load_item(path_item)
+        target =self.labels[index]
+        # return {'uid':uid, 'source': self.transform(img), 'target':target}
+        return {'source': self.transform(img), 'target':target}
+    
+    @classmethod
+    def run_item_crawler(cls, path_root, extension, **kwargs):
+        """Overwrite to speed up as paths are determined by .csv file anyway"""
+        return []

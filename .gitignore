@@ -21,5 +21,6 @@
 /runs 
 /results
 /scripts/local_trash
+/scripts/runs
 
 !/media/**

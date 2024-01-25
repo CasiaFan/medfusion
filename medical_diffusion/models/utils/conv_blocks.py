@@ -82,6 +82,9 @@ class BasicUp(nn.Module):
         ) -> None:
         super().__init__()
         self.learnable_interpolation = learnable_interpolation
+        self.kernel_size = kernel_size
+        self.stride = stride
+        
         if learnable_interpolation:
             # TransConvolution = Conv[Conv.CONVTRANS, spatial_dims]
             # padding = get_padding(kernel_size, stride)
@@ -98,8 +101,10 @@ class BasicUp(nn.Module):
             #     dilation=1
             # )
 
-            self.calc_shape = lambda x: tuple((np.asarray(x)-1)*np.atleast_1d(stride)+np.atleast_1d(kernel_size)
-                                            -2*np.atleast_1d(get_padding(kernel_size, stride)))
+            # self.calc_shape = lambda x: tuple((np.asarray(x)-1)*np.atleast_1d(stride)+np.atleast_1d(kernel_size)
+            #                                 -2*np.atleast_1d(get_padding(kernel_size, stride)))
+    
+            
             Convolution = Conv[Conv.CONV, spatial_dims]
             self.up_op = Convolution(
                 in_channels,
@@ -115,19 +120,24 @@ class BasicUp(nn.Module):
             if use_res:
                 self.up_skip = nn.PixelShuffle(2) # WARNING: Only supports 2D, out_channels == in_channels/4
         else:
-            self.calc_shape = lambda x: tuple((np.asarray(x)-1)*np.atleast_1d(stride)+np.atleast_1d(kernel_size)
-                                            -2*np.atleast_1d(get_padding(kernel_size, stride)))
+            # self.calc_shape = lambda x: tuple((np.asarray(x)-1)*np.atleast_1d(stride)+np.atleast_1d(kernel_size)
+            #                                 -2*np.atleast_1d(get_padding(kernel_size, stride)))
+            pass
     
     def forward(self, x, emb=None):
         if self.learnable_interpolation:
-            new_size = self.calc_shape(x.shape[2:]) 
+            # new_size = self.calc_shape(x.shape[2:]) 
+            new_size = tuple((np.asarray(x.shape[2:])-1)*np.atleast_1d(self.stride)+np.atleast_1d(self.kernel_size)
+                                            -2*np.atleast_1d(get_padding(self.kernel_size, self.stride)))
             x_res = F.interpolate(x, size=new_size, mode='nearest-exact')
             y = self.up_op(x_res)
             if hasattr(self, 'up_skip'):
                 y = y+self.up_skip(x)
             return y 
         else:
-            new_size = self.calc_shape(x.shape[2:]) 
+            # new_size = self.calc_shape(x.shape[2:]) 
+            new_size = tuple((np.asarray(x.shape[2:])-1)*np.atleast_1d(self.stride)+np.atleast_1d(self.kernel_size)
+                                             -2*np.atleast_1d(get_padding(self.kernel_size, self.stride)))
             return F.interpolate(x, size=new_size, mode='nearest-exact')
 
 
